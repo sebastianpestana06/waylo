@@ -74,6 +74,18 @@ export function SignupForm() {
         minLength={6}
         required
       />
+      <label className="flex items-start gap-2 text-sm text-ink-soft">
+        <input
+          type="checkbox"
+          name="privacy_ack"
+          className="mt-1"
+          required
+        />
+        <span>
+          I understand this is for local testing and that personal information I
+          add may be shared with people on my trips.
+        </span>
+      </label>
       {error && (
         <p className="rounded-xl bg-coral/10 px-3 py-2 text-sm text-coral">
           {error}

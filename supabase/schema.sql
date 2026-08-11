@@ -305,6 +305,13 @@ insert into storage.buckets (id, name, public)
 values ('passports', 'passports', false), ('trip-docs', 'trip-docs', false)
 on conflict (id) do nothing;
 
+-- Storage lives outside public, so these survive wipe_local.sql — drop first for re-runs
+drop policy if exists "passport files own" on storage.objects;
+drop policy if exists "trip docs members read" on storage.objects;
+drop policy if exists "trip docs editors write" on storage.objects;
+drop policy if exists "trip docs editors update" on storage.objects;
+drop policy if exists "trip docs editors delete" on storage.objects;
+
 create policy "passport files own" on storage.objects for all using (
   bucket_id = 'passports' and auth.uid()::text = (storage.foldername(name))[1]
 ) with check (
@@ -358,8 +365,24 @@ $$;
 revoke all on function public.trip_passport_summaries(uuid) from public;
 grant execute on function public.trip_passport_summaries(uuid) to authenticated;
 
--- realtime
-alter publication supabase_realtime add table checklist_items;
-alter publication supabase_realtime add table expense_payments;
-alter publication supabase_realtime add table expense_shares;
-alter publication supabase_realtime add table itinerary_items;
+-- realtime (ignore if already members after a re-run)
+do $$
+begin
+  alter publication supabase_realtime add table checklist_items;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  alter publication supabase_realtime add table expense_payments;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  alter publication supabase_realtime add table expense_shares;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  alter publication supabase_realtime add table itinerary_items;
+exception when duplicate_object then null;
+end $$;

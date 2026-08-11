@@ -10,20 +10,25 @@ Collaborative holiday trip planner — calendar, checklists, split payments, vis
 - Open-Meteo (weather)
 - Vercel hosting
 
-## Setup
+## Setup (local)
 
-1. Create a free [Supabase](https://supabase.com) project.
-2. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql).
-3. Copy `.env.example` to `.env.local` and fill in keys.
-4. Optional: add `GEMINI_API_KEY` for AI visa checks.
-5. Install and run:
+Use a **separate Supabase project** from production. See [docs/LOCAL_VS_PROD.md](docs/LOCAL_VS_PROD.md).
+
+1. Create a free Supabase project for local use (e.g. `waylo-local`).
+2. In that project’s SQL editor, run [`supabase/schema.sql`](supabase/schema.sql).
+3. Copy [`.env.example`](.env.example) → `.env.local` and fill in the **local** project URL + anon key.
+4. Set Auth Site URL to `http://localhost:3000` (and add redirect URLs).
+5. Optional: add `GEMINI_API_KEY` for AI visa checks.
+6. Install and run:
 
 ```bash
 npm install
 npm run dev
 ```
 
-6. Deploy: push to GitHub and import the repo in [Vercel](https://vercel.com). Set the same env vars. Set `NEXT_PUBLIC_APP_URL` to your Vercel URL.
+## Production
+
+Do **not** reuse local keys. Set production Supabase + `NEXT_PUBLIC_APP_URL` in Vercel only. Details: [DEPLOY.md](DEPLOY.md).
 
 ## Versioning
 
