@@ -15,11 +15,10 @@ export default function SignupPage() {
       >
         <p className="font-semibold">Personal information notice</p>
         <p className="mt-1.5 leading-relaxed">
-          Waylo is currently for <span className="font-medium">local testing
-          only</span>. If you add details such as your name, email, passport
-          country/expiry, or trip documents, trip mates you invite may see some
-          of that information. Do not use real sensitive data you are not
-          comfortable sharing in a test environment.
+          Waylo is a collaborative trip planner. Details you add — such as your
+          display name, email, passport country and expiry, or trip documents —
+          may be visible to people you invite onto your trips. Only add
+          information you are comfortable sharing with those travellers.
         </p>
       </aside>
       <SignupForm />

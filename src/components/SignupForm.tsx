@@ -82,8 +82,8 @@ export function SignupForm() {
           required
         />
         <span>
-          I understand this is for local testing and that personal information I
-          add may be shared with people on my trips.
+          I understand that personal information I add may be shared with people
+          on my trips.
         </span>
       </label>
       {error && (
