@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ReminderBanner } from "@/components/ReminderBanner";
 import { buildReminders } from "@/lib/alerts";
 import { createTrip, signOut } from "@/lib/actions";
+import { ensureProfile } from "@/lib/ensure-profile";
 import { createClient } from "@/lib/supabase/server";
 import { formatTripLocations } from "@/lib/locations";
 import { TRIP_TEMPLATES } from "@/lib/templates";
@@ -20,6 +21,8 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  await ensureProfile(supabase, user);
 
   const { data: memberships } = await supabase
     .from("trip_members")

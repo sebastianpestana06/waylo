@@ -13,6 +13,7 @@ import {
 import { sitesForFeature } from "@/lib/popular-sites";
 import { toIsoDate } from "@/lib/dates";
 import { tripCountries } from "@/lib/locations";
+import { ensureProfile } from "@/lib/ensure-profile";
 import type { Trip, VisaCheckResult } from "@/lib/types";
 
 export async function signIn(formData: FormData) {
@@ -63,6 +64,8 @@ export async function createTrip(formData: FormData) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  await ensureProfile(supabase, user);
 
   const templateKey = String(formData.get("template_key") || "blank");
   const template =
@@ -731,6 +734,32 @@ export async function removeMember(tripId: string, userId: string) {
     .eq("user_id", userId)
     .neq("role", "owner");
   revalidatePath(`/trips/${tripId}/more`);
+}
+
+/** Permanently delete a trip (owner only). Cascades related rows. */
+export async function deleteTrip(tripId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: trip, error: tripError } = await supabase
+    .from("trips")
+    .select("id, owner_id")
+    .eq("id", tripId)
+    .single();
+
+  if (tripError || !trip) throw new Error(tripError?.message || "Trip not found");
+  if (trip.owner_id !== user.id) {
+    throw new Error("Only the trip owner can delete this trip.");
+  }
+
+  const { error } = await supabase.from("trips").delete().eq("id", tripId);
+  if (error) throw new Error(error.message || "Failed to delete trip");
+
+  revalidatePath("/dashboard");
+  redirect("/dashboard");
 }
 
 export async function createMeeting(tripId: string, formData: FormData) {

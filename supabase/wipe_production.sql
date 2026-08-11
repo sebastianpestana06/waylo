@@ -1,7 +1,7 @@
--- LOCAL ONLY (waylo-local). Do NOT run on production (Waylo).
--- Wipes app tables. Re-run schema.sql afterwards.
--- Note: auth users can remain after this wipe; they will have no profiles row
--- until the app recreates it (ensureProfile) or you delete auth users below.
+-- PRODUCTION WIPE (Waylo / ycdsxappysvjfhebskpc) ONLY.
+-- Do NOT run on waylo-local.
+-- Deletes all app data + auth users. Re-run schema.sql immediately after.
+-- Do not DELETE storage.objects here — Supabase blocks it; clear files in Storage UI if needed.
 
 drop schema if exists public cascade;
 create schema public;
@@ -12,8 +12,8 @@ alter default privileges in schema public grant all on sequences to postgres, an
 alter default privileges in schema public grant all on functions to postgres, anon, authenticated, service_role;
 grant all on schema public to public;
 
--- Optional: clear users (avoid truncate ... cascade — it hits protected storage tables)
--- delete from auth.identities;
--- delete from auth.sessions;
--- delete from auth.refresh_tokens;
--- delete from auth.users;
+-- Clear auth without truncate ... cascade (that hits protected storage triggers)
+delete from auth.refresh_tokens;
+delete from auth.sessions;
+delete from auth.identities;
+delete from auth.users;

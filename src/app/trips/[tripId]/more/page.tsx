@@ -8,6 +8,7 @@ import {
   uploadTripDocument,
   voteMeeting,
 } from "@/lib/actions";
+import { DeleteTripButton } from "@/components/DeleteTripButton";
 import { createClient } from "@/lib/supabase/server";
 import { tripCities, tripCountries } from "@/lib/locations";
 import type {
@@ -307,6 +308,17 @@ export default async function MorePage({
           </Link>
         </div>
       </section>
+
+      {isOwner && (
+        <section className="panel space-y-3 ring-1 ring-coral/25">
+          <h2 className="font-display text-xl text-coral">Danger zone</h2>
+          <p className="text-sm text-ink-soft">
+            Permanently delete this trip and all of its planning data. Only the
+            trip owner can do this.
+          </p>
+          <DeleteTripButton tripId={tripId} tripTitle={t.title} />
+        </section>
+      )}
     </div>
   );
 }
