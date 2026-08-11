@@ -33,7 +33,7 @@ export async function checkVisaWithAI(input: {
   }
 
   const genAI = new GoogleGenerativeAI(key);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
   const prompt = `You are a travel documentation assistant. Given passport nationalities ${JSON.stringify(input.nationalities)} and destination country/city "${input.destination}", assess whether a visa is typically required for short tourist stays.
 Respond ONLY with JSON: {"likely_required":boolean,"summary":string,"caveats":string[]}
 Be conservative if unsure. Do not invent official forms.`;

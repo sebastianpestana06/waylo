@@ -533,7 +533,7 @@ async function refineRanksWithAI(
 
   try {
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
     const prompt = `You rank booking WEBSITES (not hotels) for a trip. Score each site 1-10 for how well it fits these filters.
 
 Filters:

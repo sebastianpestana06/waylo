@@ -9,12 +9,14 @@ import {
   ListChecks,
   MoreHorizontal,
   Route,
+  Stamp,
 } from "lucide-react";
 
 const items = [
   { href: "overview", label: "Trip", icon: Route },
   { href: "calendar", label: "Cal", icon: CalendarDays },
   { href: "stay", label: "Stay", icon: BedDouble },
+  { href: "visas", label: "Visas", icon: Stamp },
   { href: "plan", label: "Plan", icon: ListChecks },
   { href: "money", label: "Money", icon: CircleDollarSign },
   { href: "more", label: "More", icon: MoreHorizontal },
@@ -24,7 +26,7 @@ export function TripBottomNav({ tripId }: { tripId: string }) {
   const pathname = usePathname();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-card/95 backdrop-blur md:hidden">
-      <ul className="mx-auto grid max-w-lg grid-cols-6 gap-0.5 px-1 py-2">
+      <ul className="mx-auto grid max-w-lg grid-cols-7 gap-0 px-0.5 py-2">
         {items.map(({ href, label, icon: Icon }) => {
           const target =
             href === "overview"
@@ -42,7 +44,7 @@ export function TripBottomNav({ tripId }: { tripId: string }) {
                   active ? "bg-sea/10 text-sea-deep" : "text-ink-soft"
                 }`}
               >
-                <Icon size={17} />
+                <Icon size={16} />
                 {label}
               </Link>
             </li>

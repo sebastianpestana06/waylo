@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import {
   createMeeting,
   removeMember,
-  runVisaCheck,
   updateMemberRole,
   updateTripLocations,
   uploadTripDocument,
@@ -59,7 +58,12 @@ export default async function MorePage({
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const inviteEditor = `${origin}/invite/${t.invite_token}?role=editor`;
   const inviteViewer = `${origin}/invite/${t.invite_token}?role=viewer`;
-  const visa = t.last_visa_check as VisaCheckResult | null;
+  const visaChecks: VisaCheckResult[] = Array.isArray(t.visa_checks)
+    ? t.visa_checks
+    : t.last_visa_check
+      ? [t.last_visa_check]
+      : [];
+  const visaNeeded = visaChecks.filter((v) => v.likely_required);
 
   const countriesList = tripCountries(t);
   const citiesList = tripCities(t);
@@ -173,34 +177,18 @@ export default async function MorePage({
         </ul>
       </section>
 
-      <section className="panel space-y-3">
-        <h2 className="font-display text-xl">VISA checker</h2>
-        <p className="text-xs text-ink-soft">
-          Uses your saved passports + AI guidance. Always verify officially.
+      <section className="panel space-y-2">
+        <h2 className="font-display text-xl">Passports & visas</h2>
+        <p className="text-sm text-ink-soft">
+          {visaNeeded.length
+            ? `Visa may be needed for ${visaNeeded.map((v) => v.destination).join(", ")}.`
+            : visaChecks.length
+              ? "Visa checks on file — open the Visas tab for details."
+              : "Check traveller passports against trip countries and run visa guidance."}
         </p>
-        {visa && (
-          <div className="rounded-xl bg-sand-deep/40 p-3 text-sm">
-            <p className="font-semibold">
-              {visa.likely_required ? "Visa likely needed" : "Likely visa-free / unclear"}{" "}
-              for {visa.destination}
-            </p>
-            <p className="mt-1">{visa.summary}</p>
-          </div>
-        )}
-        {canEdit && (
-          <form action={runVisaCheck.bind(null, tripId)} className="space-y-2">
-            <input
-              name="destination"
-              className="field"
-              placeholder="Destination country"
-              defaultValue={t.destinations?.[0] || ""}
-              required
-            />
-            <button className="btn btn-primary" type="submit">
-              Check visa guidance
-            </button>
-          </form>
-        )}
+        <Link href={`/trips/${tripId}/visas`} className="btn btn-primary">
+          Open Visas tab
+        </Link>
       </section>
 
       <section className="panel space-y-3">

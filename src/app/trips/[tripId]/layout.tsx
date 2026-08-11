@@ -64,6 +64,7 @@ export default async function TripLayout({
               ["", "Overview"],
               ["calendar", "Calendar"],
               ["stay", "Stay"],
+              ["visas", "Visas"],
               ["plan", "Plan"],
               ["money", "Money"],
               ["more", "More"],

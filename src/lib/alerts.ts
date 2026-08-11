@@ -97,15 +97,20 @@ export function buildReminders(input: AlertInput): ReminderItem[] {
   }
 
   for (const trip of input.trips) {
-    const visa = trip.last_visa_check as VisaCheckResult | null;
-    if (visa?.likely_required) {
+    const visaChecks: VisaCheckResult[] = Array.isArray(trip.visa_checks)
+      ? trip.visa_checks
+      : trip.last_visa_check
+        ? [trip.last_visa_check]
+        : [];
+    for (const visa of visaChecks) {
+      if (!visa.likely_required) continue;
       items.push({
-        id: `visa-${trip.id}`,
+        id: `visa-${trip.id}-${visa.destination}`,
         priority: 2,
         kind: "visa",
         title: `Visa may be needed for ${visa.destination}`,
         body: visa.summary.slice(0, 120),
-        href: `/trips/${trip.id}/more`,
+        href: `/trips/${trip.id}/visas`,
         tripId: trip.id,
       });
     }
@@ -119,7 +124,7 @@ export function buildReminders(input: AlertInput): ReminderItem[] {
           kind: "passport",
           title: "Passport renewal suggested",
           body: `${p.issuing_country} passport should be valid until at least ${check.requiredUntil} (9 months after trip end).`,
-          href: `/settings`,
+          href: `/trips/${trip.id}/visas`,
           tripId: trip.id,
         });
       }

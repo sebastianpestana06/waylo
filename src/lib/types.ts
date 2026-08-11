@@ -85,6 +85,8 @@ export type Trip = {
   cities?: string[] | null;
   template_key: string | null;
   last_visa_check: VisaCheckResult | null;
+  /** Per-country visa guidance for the trip (newest batch). */
+  visa_checks?: VisaCheckResult[] | null;
 };
 
 export type TripMember = {
@@ -182,6 +184,15 @@ export type VisaCheckResult = {
   likely_required: boolean;
   caveats: string[];
   checked_at: string;
+};
+
+/** Safe passport fields shared with trip mates (no numbers / scans). */
+export type TripPassportSummary = {
+  user_id: string;
+  display_name: string;
+  issuing_country: string;
+  expiry_date: string;
+  has_scan: boolean;
 };
 
 export type AccommodationSiteLink = {

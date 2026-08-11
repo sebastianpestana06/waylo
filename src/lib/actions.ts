@@ -12,6 +12,8 @@ import {
 } from "@/lib/linked-accounts";
 import { sitesForFeature } from "@/lib/popular-sites";
 import { toIsoDate } from "@/lib/dates";
+import { tripCountries } from "@/lib/locations";
+import type { Trip, VisaCheckResult } from "@/lib/types";
 
 export async function signIn(formData: FormData) {
   const supabase = await createClient();
@@ -574,22 +576,135 @@ export async function runVisaCheck(tripId: string, formData: FormData) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return;
-  const destination = String(formData.get("destination") || "");
+  const destination = String(formData.get("destination") || "").trim();
+  if (!destination) throw new Error("Destination is required.");
+
+  const { data: member } = await supabase
+    .from("trip_members")
+    .select("role")
+    .eq("trip_id", tripId)
+    .eq("user_id", user.id)
+    .single();
+  if (!member || (member.role !== "owner" && member.role !== "editor")) {
+    throw new Error("Only editors can run visa checks.");
+  }
+
+  const nationalities = await loadTripNationalities(supabase, tripId, user.id);
+  if (!nationalities.length) {
+    throw new Error(
+      "No passport nationalities on this trip yet. Add a passport in Settings.",
+    );
+  }
+  const result = await checkVisaWithAI({ nationalities, destination });
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("visa_checks")
+    .eq("id", tripId)
+    .single();
+  const prev = Array.isArray(trip?.visa_checks)
+    ? (trip!.visa_checks as VisaCheckResult[])
+    : [];
+  const next = [
+    result,
+    ...prev.filter(
+      (c) =>
+        c.destination.toLowerCase() !== destination.toLowerCase(),
+    ),
+  ];
+  await supabase
+    .from("trips")
+    .update({ last_visa_check: result, visa_checks: next })
+    .eq("id", tripId);
+  revalidatePath(`/trips/${tripId}/visas`);
+  revalidatePath(`/trips/${tripId}/more`);
+  revalidatePath("/dashboard");
+}
+
+/** Run AI visa guidance for every trip country using all members' passport nationalities. */
+export async function runTripVisaChecks(tripId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: member } = await supabase
+    .from("trip_members")
+    .select("role")
+    .eq("trip_id", tripId)
+    .eq("user_id", user.id)
+    .single();
+  if (!member || (member.role !== "owner" && member.role !== "editor")) {
+    throw new Error("Only editors can run visa checks.");
+  }
+
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("*")
+    .eq("id", tripId)
+    .single();
+  if (!trip) throw new Error("Trip not found.");
+
+  const countries = tripCountries(trip as Trip);
+  if (!countries.length) {
+    throw new Error("Add at least one trip country in More → Places first.");
+  }
+
+  const nationalities = await loadTripNationalities(supabase, tripId, user.id);
+  if (!nationalities.length) {
+    throw new Error(
+      "No passport nationalities on this trip yet. Ask travellers to add passports in Settings.",
+    );
+  }
+
+  const results: VisaCheckResult[] = [];
+  for (const destination of countries) {
+    results.push(await checkVisaWithAI({ nationalities, destination }));
+  }
+
+  await supabase
+    .from("trips")
+    .update({
+      visa_checks: results,
+      last_visa_check: results[0] || null,
+    })
+    .eq("id", tripId);
+
+  revalidatePath(`/trips/${tripId}/visas`);
+  revalidatePath(`/trips/${tripId}/more`);
+  revalidatePath("/dashboard");
+}
+
+async function loadTripNationalities(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tripId: string,
+  userId: string,
+) {
+  const { data: summaries, error } = await supabase.rpc(
+    "trip_passport_summaries",
+    { p_trip_id: tripId },
+  );
+  if (!error && summaries?.length) {
+    return [
+      ...new Set(
+        (summaries as { issuing_country: string }[])
+          .map((s) => s.issuing_country?.trim())
+          .filter(Boolean),
+      ),
+    ];
+  }
+  // Fallback if RPC not migrated yet: current user's passports only
   const { data: passports } = await supabase
     .from("passports")
     .select("issuing_country")
-    .eq("user_id", user.id);
-  const nationalities = (passports || []).map((p) => p.issuing_country);
-  if (!nationalities.length) {
-    throw new Error("Add at least one passport in Settings first.");
-  }
-  const result = await checkVisaWithAI({ nationalities, destination });
-  await supabase
-    .from("trips")
-    .update({ last_visa_check: result })
-    .eq("id", tripId);
-  revalidatePath(`/trips/${tripId}/more`);
-  revalidatePath("/dashboard");
+    .eq("user_id", userId);
+  return [
+    ...new Set(
+      (passports || [])
+        .map((p) => p.issuing_country?.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export async function updateMemberRole(

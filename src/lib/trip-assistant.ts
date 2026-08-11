@@ -121,7 +121,7 @@ export async function planTripUpdate(
   }
 
   const genAI = new GoogleGenerativeAI(key);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
 
   const prompt = `You are Waylo's trip planning assistant. Convert the user's message into structured trip updates.
 Trip: ${ctx.tripTitle}
