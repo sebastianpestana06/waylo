@@ -4,7 +4,7 @@ All notable changes to Waylo are documented here.
 
 ## [Unreleased]
 
-## [0.2.0] — 2026-08-11 (local)
+## [0.2.0] — 2026-08-11
 
 ### Added
 - Stay tab: filter stays and rank booking websites 1–10 with deep links

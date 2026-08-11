@@ -65,24 +65,25 @@ export function parsePaymentFallback(
   // I paid 50 EUR for dinner
   // paid $80 train tickets
   const patterns = [
-    /(?:paid|pay|spent|expense)\s*(?:of\s*)?(?:(?<currency>[€$£]|EUR|USD|GBP)\s*)?(?<amount>\d+(?:[.,]\d{1,2})?)\s*(?<currency2>[€$£]|EUR|USD|GBP)?\s*(?:for\s+)?(?<desc>.+)/i,
-    /(?:add(?:ed)?\s+)?(?:a\s+)?payment\s+(?:of\s+)?(?:(?<currency>[€$£]|EUR|USD|GBP)\s*)?(?<amount>\d+(?:[.,]\d{1,2})?)\s*(?<currency2>[€$£]|EUR|USD|GBP)?\s*(?:for\s+)?(?<desc>.+)/i,
+    // 1 currency?, 2 amount, 3 currency2?, 4 desc
+    /(?:paid|pay|spent|expense)\s*(?:of\s*)?([€$£]|EUR|USD|GBP)?\s*(\d+(?:[.,]\d{1,2})?)\s*([€$£]|EUR|USD|GBP)?\s*(?:for\s+)?(.+)/i,
+    /(?:add(?:ed)?\s+)?(?:a\s+)?payment\s+(?:of\s+)?([€$£]|EUR|USD|GBP)?\s*(\d+(?:[.,]\d{1,2})?)\s*([€$£]|EUR|USD|GBP)?\s*(?:for\s+)?(.+)/i,
   ];
 
   for (const re of patterns) {
     const m = text.match(re);
-    if (!m?.groups?.amount) continue;
-    const amount = Number(String(m.groups.amount).replace(",", "."));
+    if (!m?.[2]) continue;
+    const amount = Number(String(m[2]).replace(",", "."));
     if (!Number.isFinite(amount) || amount <= 0) continue;
 
-    const rawCur = (m.groups.currency || m.groups.currency2 || "").toUpperCase();
+    const rawCur = (m[1] || m[3] || "").toUpperCase();
     let currency = defaultCurrency || "EUR";
     if (rawCur === "€" || rawCur === "EUR") currency = "EUR";
     else if (rawCur === "$" || rawCur === "USD") currency = "USD";
     else if (rawCur === "£" || rawCur === "GBP") currency = "GBP";
     else if (rawCur) currency = rawCur;
 
-    let description = (m.groups.desc || "Expense").trim();
+    let description = (m[4] || "Expense").trim();
     description = description.replace(/^(for|on)\s+/i, "").trim();
     // "accommodation in Kyoto" / "hotel for Tokyo" → nice label
     if (!description) description = "Expense";
