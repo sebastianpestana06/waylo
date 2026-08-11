@@ -30,6 +30,8 @@ create table if not exists public.trips (
   owner_id uuid not null references public.profiles(id) on delete cascade,
   invite_token text unique default encode(gen_random_bytes(16), 'hex'),
   destinations text[] default '{}',
+  countries text[] default '{}',
+  cities text[] default '{}',
   template_key text,
   last_visa_check jsonb,
   created_at timestamptz default now(),
@@ -129,6 +131,40 @@ create table if not exists public.meeting_proposals (
   created_at timestamptz default now()
 );
 
+create table if not exists public.accommodation_searches (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references public.trips(id) on delete cascade,
+  created_by uuid references public.profiles(id) on delete set null,
+  city text not null,
+  check_in date not null,
+  check_out date not null,
+  max_station_km numeric(8,2),
+  budget_per_person_night numeric(12,2) not null check (budget_per_person_night > 0),
+  currency text not null default 'EUR',
+  adults int not null default 2 check (adults > 0),
+  rooms int not null default 1 check (rooms > 0),
+  notes text,
+  ai_summary text,
+  site_links jsonb not null default '[]'::jsonb,
+  results jsonb not null default '[]'::jsonb,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.booked_stays (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references public.trips(id) on delete cascade,
+  created_by uuid references public.profiles(id) on delete set null,
+  site_id text not null,
+  site_label text not null,
+  booking_id text not null,
+  property_name text,
+  city text,
+  check_in date,
+  check_out date,
+  notes text,
+  created_at timestamptz default now()
+);
+
 -- helpers
 create or replace function public.is_trip_member(p_trip_id uuid)
 returns boolean language sql stable security definer set search_path = public as $$
@@ -181,6 +217,8 @@ alter table trip_documents enable row level security;
 alter table expense_payments enable row level security;
 alter table expense_shares enable row level security;
 alter table meeting_proposals enable row level security;
+alter table accommodation_searches enable row level security;
+alter table booked_stays enable row level security;
 
 create policy "profiles read own or trip mates" on profiles for select using (
   id = auth.uid() or exists (
@@ -254,6 +292,12 @@ create policy "shares update mark paid" on expense_shares for update using (
 
 create policy "meetings select" on meeting_proposals for select using (is_trip_member(trip_id));
 create policy "meetings write" on meeting_proposals for all using (can_edit_trip(trip_id)) with check (can_edit_trip(trip_id));
+
+create policy "accommodation select" on accommodation_searches for select using (is_trip_member(trip_id));
+create policy "accommodation write" on accommodation_searches for all using (can_edit_trip(trip_id)) with check (can_edit_trip(trip_id));
+
+create policy "booked stays select" on booked_stays for select using (is_trip_member(trip_id));
+create policy "booked stays write" on booked_stays for all using (can_edit_trip(trip_id)) with check (can_edit_trip(trip_id));
 
 -- storage buckets (create via dashboard or storage API): passports, trip-docs (private)
 insert into storage.buckets (id, name, public)

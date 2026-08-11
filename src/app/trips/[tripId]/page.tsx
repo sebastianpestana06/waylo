@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ReminderBanner } from "@/components/ReminderBanner";
+import { TripAssistant } from "@/components/TripAssistant";
 import { buildReminders } from "@/lib/alerts";
 import { detectSegmentConflicts } from "@/lib/conflicts";
 import { passportValidForTrip } from "@/lib/passport";
 import { createClient } from "@/lib/supabase/server";
-import { fetchWeatherSnapshot } from "@/lib/weather";
+import { fetchWeatherForDestinations } from "@/lib/weather";
+import { formatTripLocations, tripPlaces } from "@/lib/locations";
 import type {
   BookingDeadline,
   ExpensePayment,
@@ -78,10 +80,11 @@ export default async function TripOverviewPage({
     .map((p) => ({ p, check: passportValidForTrip(p.expiry_date, t.end_date) }))
     .filter((x) => !x.check.ok);
 
-  const place = t.destinations?.[0];
-  const weather = place
-    ? await fetchWeatherSnapshot(place, t.start_date, t.end_date)
-    : null;
+  const weatherSnapshots = await fetchWeatherForDestinations(
+    tripPlaces(t),
+    t.start_date,
+    t.end_date,
+  );
 
   return (
     <>
@@ -93,14 +96,26 @@ export default async function TripOverviewPage({
             {t.start_date || "TBD"} → {t.end_date || "TBD"}
           </p>
           <p className="mt-2 text-ink-soft">
-            {(t.destinations || []).join(" · ") || "Add destinations in More"}
+            {formatTripLocations(t) || "Add countries & cities when creating a trip"}
           </p>
         </section>
 
-        {weather && (
+        <TripAssistant tripId={tripId} />
+
+        {weatherSnapshots.length > 0 && (
           <section className="panel">
             <h2 className="font-display text-xl">Weather snapshot</h2>
-            <p className="mt-1 text-sm text-ink-soft">{weather.summary}</p>
+            <ul className="mt-3 space-y-2">
+              {weatherSnapshots.map((w) => (
+                <li
+                  key={w.place}
+                  className="rounded-xl bg-white/70 px-3 py-2 ring-1 ring-line/50"
+                >
+                  <p className="font-semibold">{w.place}</p>
+                  <p className="text-sm text-ink-soft">{w.summary}</p>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 

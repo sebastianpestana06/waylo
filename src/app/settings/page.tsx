@@ -1,33 +1,78 @@
 import { redirect } from "next/navigation";
 import {
   addPassport,
-  deletePassport,
   signOut,
   updateProfile,
 } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
 import { APP_VERSION } from "@/lib/version";
 import type { Memberships, Passport } from "@/lib/types";
+import { normalizeLinkedAccounts } from "@/lib/linked-accounts";
+import { LinkedAccountsForm } from "@/components/LinkedAccountsForm";
+import {
+  PassportRegistrationList,
+  type PassportWithFile,
+} from "@/components/PassportRegistrationList";
+import { ClearDateField } from "@/components/ClearDateField";
 import Link from "next/link";
 
-export default async function SettingsPage() {
+function fileKindFromPath(path: string | null): PassportWithFile["fileKind"] {
+  if (!path) return null;
+  const lower = path.toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|heic|bmp)$/.test(lower)) return "image";
+  if (lower.endsWith(".pdf")) return "pdf";
+  return "other";
+}
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const params = await searchParams;
+  const passportFlash = String(params.passport || "");
+  const photoFlash = String(params.photo || "");
+  const passportError = String(params.passportError || "");
+
   const [{ data: profile }, { data: passports }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).single(),
-    supabase.from("passports").select("*").eq("user_id", user.id),
+    supabase
+      .from("passports")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("expiry_date", { ascending: true }),
   ]);
 
   const memberships = (profile?.memberships || {}) as Memberships;
-  const prefs = profile?.booking_prefs || {};
+  const accounts = normalizeLinkedAccounts(memberships);
   const ff =
     memberships.frequentFlyers
       ?.map((f) => `${f.airline}: ${f.number}`)
       .join("\n") || "";
+
+  const list = (passports || []) as Passport[];
+  const withFiles: PassportWithFile[] = await Promise.all(
+    list.map(async (p) => {
+      let fileUrl: string | null = null;
+      if (p.storage_path) {
+        const { data } = await supabase.storage
+          .from("passports")
+          .createSignedUrl(p.storage_path, 60 * 60);
+        fileUrl = data?.signedUrl || null;
+      }
+      return {
+        ...p,
+        fileUrl,
+        fileKind: fileKindFromPath(p.storage_path),
+      };
+    }),
+  );
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -53,94 +98,85 @@ export default async function SettingsPage() {
           defaultValue={profile?.home_timezone || "UTC"}
           placeholder="Home timezone (e.g. Europe/Amsterdam)"
         />
-        <h3 className="pt-2 text-sm font-semibold">Linked memberships</h3>
-        <input
-          name="agoda"
-          className="field"
-          defaultValue={memberships.agoda || ""}
-          placeholder="Agoda member ID"
+
+        <LinkedAccountsForm
+          initialAccounts={accounts}
+          frequentFlyersDefault={ff}
         />
-        <input
-          name="booking"
-          className="field"
-          defaultValue={memberships.booking || ""}
-          placeholder="Booking.com Genius ID"
-        />
-        <input
-          name="skyscanner"
-          className="field"
-          defaultValue={memberships.skyscanner || ""}
-          placeholder="Skyscanner account note"
-        />
-        <textarea
-          name="frequent_flyers"
-          className="field min-h-24"
-          defaultValue={ff}
-          placeholder={"Frequent flyers, one per line:\nKLM: 123456"}
-        />
-        <h3 className="pt-2 text-sm font-semibold">Booking search prefs</h3>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="pref_skyscanner"
-            defaultChecked={prefs.skyscanner !== false}
-          />
-          Skyscanner deep links
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="pref_booking"
-            defaultChecked={prefs.booking !== false}
-          />
-          Booking.com deep links
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="pref_agoda"
-            defaultChecked={Boolean(prefs.agoda)}
-          />
-          Agoda deep links
-        </label>
+
         <button className="btn btn-primary" type="submit">
           Save settings
         </button>
       </form>
 
       <section className="panel mt-6 space-y-3">
-        <h2 className="font-display text-xl">Passports</h2>
-        <ul className="space-y-2">
-          {((passports || []) as Passport[]).map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-line/50"
-            >
-              <span>
-                {p.issuing_country} · expires {p.expiry_date}
-              </span>
-              <form action={deletePassport.bind(null, p.id)}>
-                <button className="text-coral" type="submit">
-                  Remove
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-        <form action={addPassport} className="space-y-2">
-          <input
-            name="issuing_country"
-            className="field"
-            placeholder="Issuing country"
+        <div>
+          <h2 className="font-display text-xl">Passports</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Saved passports appear below with the details you entered and any
+            scan or photo you uploaded.
+          </p>
+        </div>
+
+        {passportFlash === "added" ? (
+          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900 ring-1 ring-emerald-200">
+            Passport saved. Your registration is listed below
+            {photoFlash === "failed"
+              ? " (photo upload failed — details were still saved)."
+              : "."}
+          </p>
+        ) : null}
+        {passportFlash === "saved" && photoFlash === "failed" ? (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
+            Passport details saved, but the photo/scan could not be uploaded.
+            Check that the <code>passports</code> storage bucket exists in
+            Supabase.
+          </p>
+        ) : null}
+        {passportError ? (
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-red-200">
+            Could not save passport
+            {passportError === "missing"
+              ? ": country and expiry date are required."
+              : `: ${passportError}`}
+          </p>
+        ) : null}
+
+        <PassportRegistrationList passports={withFiles} />
+
+        <form action={addPassport} className="space-y-2 border-t border-line/40 pt-3">
+          <p className="text-sm font-medium text-ink">Add a passport</p>
+          <label className="block text-xs text-ink-soft">
+            Issuing country
+            <input
+              name="issuing_country"
+              className="field mt-1"
+              placeholder="e.g. Netherlands"
+              required
+            />
+          </label>
+          <label className="block text-xs text-ink-soft">
+            Passport number (optional)
+            <input
+              name="passport_number"
+              className="field mt-1"
+              placeholder="As printed in the passport"
+            />
+          </label>
+          <ClearDateField
+            name="expiry_date"
+            label="Expiry date"
             required
           />
-          <input
-            name="passport_number"
-            className="field"
-            placeholder="Passport number (optional)"
-          />
-          <input name="expiry_date" type="date" className="field" required />
-          <input name="file" type="file" accept="image/*,.pdf" className="field" />
+          <label className="block text-xs text-ink-soft">
+            Scan or photo (optional)
+            <input
+              name="file"
+              type="file"
+              className="field mt-1"
+              accept="image/*,.pdf"
+            />
+          </label>
           <button className="btn btn-primary" type="submit">
             Add passport
           </button>

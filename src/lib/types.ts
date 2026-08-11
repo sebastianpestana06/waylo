@@ -1,5 +1,5 @@
 export const APP_NAME = "Waylo";
-export const APP_VERSION = "0.1.0";
+export const APP_VERSION = "0.2.0";
 
 export type TripRole = "owner" | "editor" | "viewer";
 
@@ -12,7 +12,37 @@ export type TravelMode =
   | "ferry"
   | "other";
 
+export type LinkedAccountType =
+  | "member_id"
+  | "email"
+  | "username"
+  | "loyalty"
+  | "none";
+
+/** added = site saved from URL; linked = user confirmed connect after signing in on that site */
+export type LinkedAccountStatus = "added" | "linked";
+
+export type LinkedAccount = {
+  id: string;
+  /** Stable slug from hostname (e.g. booking.com) */
+  provider: string;
+  label: string;
+  /** Origin or URL the user pasted */
+  siteUrl: string;
+  hostname: string;
+  status: LinkedAccountStatus;
+  linkType: LinkedAccountType;
+  value?: string;
+  notes?: string;
+  /** When true, show this site in calendar deep links */
+  enabled: boolean;
+  linkedAt?: string;
+};
+
 export type Memberships = {
+  /** Preferred structured linked booking/travel accounts */
+  accounts?: LinkedAccount[];
+  /** Legacy string fields (migrated on save) */
   agoda?: string;
   booking?: string;
   skyscanner?: string;
@@ -51,6 +81,8 @@ export type Trip = {
   owner_id: string;
   invite_token: string;
   destinations: string[];
+  countries?: string[] | null;
+  cities?: string[] | null;
   template_key: string | null;
   last_visa_check: VisaCheckResult | null;
 };
@@ -150,6 +182,85 @@ export type VisaCheckResult = {
   likely_required: boolean;
   caveats: string[];
   checked_at: string;
+};
+
+export type AccommodationSiteLink = {
+  label: string;
+  href: string;
+};
+
+/** Booking site ranked for how well it fits the Waylo filters (1–10). */
+export type RankedBookingSite = {
+  label: string;
+  href: string;
+  fit_score: number;
+  why_fit: string;
+  strengths?: string[];
+  caveats?: string[];
+};
+
+/** @deprecated Kept for older saved searches; new searches store RankedBookingSite in results. */
+export type AccommodationPhoto = {
+  url: string;
+  alt: string;
+};
+
+export type AccommodationSuggestion = {
+  name: string;
+  area: string;
+  estimated_price_ppn: number;
+  currency: string;
+  estimated_station_km: number | null;
+  nearest_station?: string | null;
+  match_score: number;
+  why_fit: string;
+  style: string;
+  amenities?: string[];
+  highlights?: string[];
+  guest_rating?: number | null;
+  nights?: number;
+  adults?: number;
+  estimated_total_pp?: number | null;
+  budget_ppn?: number | null;
+  within_budget?: boolean;
+  photos?: AccommodationPhoto[];
+  site_links: AccommodationSiteLink[];
+};
+
+export type AccommodationSearch = {
+  id: string;
+  trip_id: string;
+  created_by: string | null;
+  city: string;
+  check_in: string;
+  check_out: string;
+  max_station_km: number | null;
+  budget_per_person_night: number;
+  currency: string;
+  adults: number;
+  /** Optional until migrate_accommodation_rooms.sql is applied */
+  rooms?: number;
+  notes: string | null;
+  ai_summary: string | null;
+  site_links: AccommodationSiteLink[];
+  /** Ranked booking sites (new) or legacy hotel suggestions */
+  results: RankedBookingSite[] | AccommodationSuggestion[];
+  created_at: string;
+};
+
+export type BookedStay = {
+  id: string;
+  trip_id: string;
+  created_by: string | null;
+  site_id: string;
+  site_label: string;
+  booking_id: string;
+  property_name: string | null;
+  city: string | null;
+  check_in: string | null;
+  check_out: string | null;
+  notes: string | null;
+  created_at: string;
 };
 
 export type ReminderItem = {

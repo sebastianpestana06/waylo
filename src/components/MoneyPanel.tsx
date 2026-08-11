@@ -3,8 +3,9 @@
 import { createExpense, markSharePaid } from "@/lib/actions";
 import { formatMoney } from "@/lib/alerts";
 import { computeNetBalances } from "@/lib/settle";
-import type { ExpensePayment, Profile, TripMember } from "@/lib/types";
-import { useMemo, useState } from "react";
+import type { ExpensePayment, ExpenseShare, Profile, TripMember } from "@/lib/types";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 export function MoneyPanel({
   tripId,
@@ -23,17 +24,42 @@ export function MoneyPanel({
   canEdit: boolean;
   focusId?: string;
 }) {
-  const [selected, setSelected] = useState(
-    members.map((m) => m.user_id),
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [selected, setSelected] = useState(members.map((m) => m.user_id));
+  const [paidOverrides, setPaidOverrides] = useState<Record<string, boolean>>(
+    {},
   );
+
   const balances = useMemo(
     () => computeNetBalances(payments, profiles),
     [payments, profiles],
   );
 
-  const isOwnerOrCreator = (createdBy: string) =>
+  const canMarkPaid = (createdBy: string) =>
     createdBy === userId ||
     members.find((m) => m.user_id === userId)?.role === "owner";
+
+  function isPaid(share: ExpenseShare) {
+    if (share.id in paidOverrides) return paidOverrides[share.id];
+    return Boolean(share.paid);
+  }
+
+  function togglePaid(share: ExpenseShare, payment: ExpensePayment, next: boolean) {
+    if (!canMarkPaid(payment.created_by)) return;
+    // Payer's own share is always settled — don't toggle
+    if (share.user_id === payment.created_by) return;
+
+    setPaidOverrides((prev) => ({ ...prev, [share.id]: next }));
+    startTransition(async () => {
+      try {
+        await markSharePaid(tripId, share.id, next);
+        router.refresh();
+      } catch {
+        setPaidOverrides((prev) => ({ ...prev, [share.id]: !next }));
+      }
+    });
+  }
 
   return (
     <div className="space-y-4 animate-fade">
@@ -44,10 +70,7 @@ export function MoneyPanel({
             <li className="text-sm text-ink-soft">No outstanding balances.</li>
           )}
           {balances.map((b) => (
-            <li
-              key={b.userId}
-              className="flex justify-between text-sm"
-            >
+            <li key={b.userId} className="flex justify-between text-sm">
               <span>{b.name}</span>
               <span className={b.net >= 0 ? "text-leaf" : "text-coral"}>
                 {b.net >= 0 ? "+" : ""}
@@ -63,6 +86,7 @@ export function MoneyPanel({
           action={async (fd) => {
             fd.set("member_ids", selected.join(","));
             await createExpense(tripId, fd);
+            router.refresh();
           }}
           className="panel space-y-3"
         >
@@ -106,16 +130,18 @@ export function MoneyPanel({
                   }}
                 />
                 {profiles[m.user_id]?.display_name || "Traveler"}
+                {m.user_id === userId ? " (you)" : ""}
               </label>
             ))}
           </div>
           <p className="text-xs text-ink-soft">
-            Equal split by default. Optional custom: userId=amount,userId=amount
+            You paid the bill. Your own share is marked settled automatically;
+            mark others paid when they repay you.
           </p>
           <input
             name="custom_shares"
             className="field"
-            placeholder="optional custom shares"
+            placeholder="optional custom shares: userId=amount,..."
           />
           <button className="btn btn-primary" type="submit">
             Save payment
@@ -128,9 +154,7 @@ export function MoneyPanel({
           <div
             key={p.id}
             id={p.id}
-            className={`panel ${
-              focusId === p.id ? "ring-2 ring-coral" : ""
-            }`}
+            className={`panel ${focusId === p.id ? "ring-2 ring-coral" : ""}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -142,40 +166,70 @@ export function MoneyPanel({
               </div>
             </div>
             <ul className="mt-3 space-y-2">
-              {(p.expense_shares || []).map((s) => (
-                <li
-                  key={s.id}
-                  id={s.id}
-                  className={`flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-line/40 ${
-                    focusId === s.id ? "ring-2 ring-coral" : ""
-                  }`}
-                >
-                  <span>
-                    {profiles[s.user_id]?.display_name || "Traveler"} owes{" "}
-                    {formatMoney(Number(s.share_amount), p.currency)}
-                  </span>
-                  {isOwnerOrCreator(p.created_by) ? (
-                    <label className="flex items-center gap-2 text-xs font-semibold">
-                      <input
-                        type="checkbox"
-                        checked={s.paid}
-                        onChange={(e) =>
-                          markSharePaid(tripId, s.id, e.target.checked)
-                        }
-                      />
-                      Paid
-                    </label>
-                  ) : (
-                    <span
-                      className={
-                        s.paid ? "text-leaf font-semibold" : "text-coral"
-                      }
-                    >
-                      {s.paid ? "Paid" : "Unpaid"}
-                    </span>
-                  )}
-                </li>
-              ))}
+              {(p.expense_shares || []).map((s) => {
+                const paid = isPaid(s);
+                const isPayerShare = s.user_id === p.created_by;
+                const name =
+                  profiles[s.user_id]?.display_name || "Traveler";
+
+                return (
+                  <li
+                    key={s.id}
+                    id={s.id}
+                    className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-3 text-sm ring-1 ${
+                      focusId === s.id ? "ring-2 ring-coral" : ""
+                    } ${
+                      paid
+                        ? "bg-leaf/10 ring-leaf/30 text-ink"
+                        : "bg-coral/10 ring-coral/40 text-ink"
+                    }`}
+                  >
+                    <div>
+                      <p className="font-semibold">
+                        {name}
+                        {s.user_id === userId ? " (you)" : ""}
+                      </p>
+                      <p
+                        className={`text-sm ${
+                          paid ? "text-leaf line-through opacity-80" : "text-coral"
+                        }`}
+                      >
+                        {paid ? "Settled" : "Still owes"}{" "}
+                        {formatMoney(Number(s.share_amount), p.currency)}
+                      </p>
+                    </div>
+
+                    {isPayerShare ? (
+                      <span className="rounded-full bg-leaf/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-leaf">
+                        Covered (paid the bill)
+                      </span>
+                    ) : canMarkPaid(p.created_by) ? (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => togglePaid(s, p, !paid)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
+                          paid
+                            ? "bg-leaf text-white hover:bg-leaf/90"
+                            : "bg-coral text-white hover:bg-coral/90"
+                        }`}
+                      >
+                        {paid ? "Paid ✓ — undo" : "Mark paid"}
+                      </button>
+                    ) : (
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
+                          paid
+                            ? "bg-leaf/20 text-leaf"
+                            : "bg-coral/20 text-coral"
+                        }`}
+                      >
+                        {paid ? "Paid" : "Unpaid"}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ))}

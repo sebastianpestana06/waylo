@@ -5,10 +5,12 @@ import {
   removeMember,
   runVisaCheck,
   updateMemberRole,
+  updateTripLocations,
   uploadTripDocument,
   voteMeeting,
 } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
+import { tripCities, tripCountries } from "@/lib/locations";
 import type {
   MeetingProposal,
   Profile,
@@ -59,6 +61,11 @@ export default async function MorePage({
   const inviteViewer = `${origin}/invite/${t.invite_token}?role=viewer`;
   const visa = t.last_visa_check as VisaCheckResult | null;
 
+  const countriesList = tripCountries(t);
+  const citiesList = tripCities(t);
+  const editCountries = countriesList.join(", ");
+  const editCities = citiesList.join(", ");
+
   const profiles: Record<string, Profile> = {};
   for (const m of (members || []) as TripMember[]) {
     if (m.profiles) profiles[m.user_id] = m.profiles as Profile;
@@ -66,6 +73,57 @@ export default async function MorePage({
 
   return (
     <div className="space-y-6 animate-fade">
+      <section className="panel space-y-3">
+        <h2 className="font-display text-xl">Places</h2>
+        <p className="text-sm text-ink-soft">
+          Countries and cities for this trip — used for weather, season theme,
+          and planning.
+        </p>
+        {canEdit ? (
+          <form
+            action={updateTripLocations.bind(null, tripId)}
+            className="space-y-3"
+          >
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-soft">
+                Countries
+              </label>
+              <input
+                name="countries"
+                className="field"
+                defaultValue={editCountries}
+                placeholder="e.g. Japan, South Korea"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-soft">
+                Cities <span className="font-normal">(optional)</span>
+              </label>
+              <input
+                name="cities"
+                className="field"
+                defaultValue={editCities}
+                placeholder="e.g. Tokyo, Seoul, Kyoto"
+              />
+            </div>
+            <button className="btn btn-primary" type="submit">
+              Save places
+            </button>
+          </form>
+        ) : (
+          <div className="text-sm text-ink-soft">
+            <p>
+              <span className="font-semibold text-ink">Countries:</span>{" "}
+              {editCountries || "—"}
+            </p>
+            <p className="mt-1">
+              <span className="font-semibold text-ink">Cities:</span>{" "}
+              {editCities || "—"}
+            </p>
+          </div>
+        )}
+      </section>
+
       <section className="panel space-y-2">
         <h2 className="font-display text-xl">Share</h2>
         <p className="text-sm text-ink-soft">Google Docs–style invite links</p>

@@ -146,11 +146,12 @@ export function buildReminders(input: AlertInput): ReminderItem[] {
 
 export function formatMoney(amount: number, currency: string) {
   try {
-    return new Intl.NumberFormat(undefined, {
+    // Fixed locale so SSR and browser always match (avoids hydration errors)
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
     }).format(amount);
   } catch {
-    return `${amount} ${currency}`;
+    return `${amount.toFixed(2)} ${currency}`;
   }
 }

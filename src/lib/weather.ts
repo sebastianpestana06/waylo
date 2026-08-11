@@ -1,8 +1,15 @@
+export type WeatherSnapshot = {
+  place: string;
+  summary: string;
+  tempMax?: number;
+  tempMin?: number;
+};
+
 export async function fetchWeatherSnapshot(
   place: string,
   startDate: string | null,
   endDate: string | null,
-): Promise<{ summary: string; tempMax?: number; tempMin?: number } | null> {
+): Promise<WeatherSnapshot | null> {
   try {
     const geoRes = await fetch(
       `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=1`,
@@ -10,7 +17,9 @@ export async function fetchWeatherSnapshot(
     );
     const geo = await geoRes.json();
     const loc = geo?.results?.[0];
-    if (!loc) return { summary: `No weather data found for ${place}.` };
+    if (!loc) {
+      return { place, summary: `No weather data found for ${place}.` };
+    }
 
     const start = startDate ?? new Date().toISOString().slice(0, 10);
     const end = endDate ?? start;
@@ -18,6 +27,7 @@ export async function fetchWeatherSnapshot(
     const wRes = await fetch(url, { next: { revalidate: 3600 } });
     if (!wRes.ok) {
       return {
+        place,
         summary: `Seasonal check recommended for ${place} around your dates.`,
       };
     }
@@ -26,17 +36,36 @@ export async function fetchWeatherSnapshot(
     const mins: number[] = data?.daily?.temperature_2m_min ?? [];
     if (!maxes.length) {
       return {
+        place,
         summary: `Forecast window unavailable; check seasonal norms for ${place}.`,
       };
     }
     const tempMax = Math.max(...maxes);
     const tempMin = Math.min(...mins);
     return {
-      summary: `${place}: about ${tempMin}°–${tempMax}°C over your dates (Open-Meteo).`,
+      place,
+      summary: `About ${tempMin}°–${tempMax}°C over your dates (Open-Meteo).`,
       tempMax,
       tempMin,
     };
   } catch {
-    return null;
+    return {
+      place,
+      summary: `Couldn’t load weather for ${place}.`,
+    };
   }
+}
+
+export async function fetchWeatherForDestinations(
+  destinations: string[],
+  startDate: string | null,
+  endDate: string | null,
+): Promise<WeatherSnapshot[]> {
+  const places = [...new Set(destinations.map((d) => d.trim()).filter(Boolean))];
+  if (!places.length) return [];
+
+  const results = await Promise.all(
+    places.map((place) => fetchWeatherSnapshot(place, startDate, endDate)),
+  );
+  return results.filter((r): r is WeatherSnapshot => r != null);
 }

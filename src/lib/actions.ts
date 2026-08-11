@@ -6,13 +6,24 @@ import { createClient } from "@/lib/supabase/server";
 import { TRIP_TEMPLATES } from "@/lib/templates";
 import { checkVisaWithAI } from "@/lib/visa";
 import { equalSplit } from "@/lib/settle";
+import {
+  accountsToBookingPrefs,
+  parseLinkedAccountsFromForm,
+} from "@/lib/linked-accounts";
+import { sitesForFeature } from "@/lib/popular-sites";
+import { toIsoDate } from "@/lib/dates";
 
 export async function signIn(formData: FormData) {
   const supabase = await createClient();
   const email = String(formData.get("email") || "");
   const password = String(formData.get("password") || "");
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const detail =
+      (error as { cause?: { message?: string } }).cause?.message ||
+      error.message;
+    throw new Error(`Sign in failed: ${detail}`);
+  }
   redirect("/dashboard");
 }
 
@@ -24,9 +35,17 @@ export async function signUp(formData: FormData) {
   const { error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name } },
+    options: {
+      data: { display_name },
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/callback`,
+    },
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const detail =
+      (error as { cause?: { message?: string } }).cause?.message ||
+      error.message;
+    throw new Error(`Sign up failed: ${detail}`);
+  }
   redirect("/dashboard");
 }
 
@@ -50,12 +69,35 @@ export async function createTrip(formData: FormData) {
     String(formData.get("title") || "").trim() || template.title;
   const start_date = String(formData.get("start_date") || "") || null;
   const end_date = String(formData.get("end_date") || "") || null;
-  const destinationsRaw = String(formData.get("destinations") || "");
-  const destinations = destinationsRaw
-    ? destinationsRaw.split(",").map((s) => s.trim()).filter(Boolean)
-    : template.destinations;
+  const countriesRaw = String(formData.get("countries") || "");
+  const citiesRaw = String(formData.get("cities") || "");
+  const typedCountries = countriesRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const typedCities = citiesRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // Cities are optional. Templates only seed values when their fields were left blank.
+  const countries =
+    typedCountries.length > 0
+      ? typedCountries
+      : template.key !== "blank"
+        ? template.countries
+        : [];
+  const cities =
+    typedCities.length > 0
+      ? typedCities
+      : template.key !== "blank"
+        ? template.cities
+        : [];
+  const destinations = [...cities, ...countries];
 
-  const { data: trip, error } = await supabase
+  let trip: { id: string } | null = null;
+  let error: { message: string } | null = null;
+
+  const fullInsert = await supabase
     .from("trips")
     .insert({
       title,
@@ -63,10 +105,33 @@ export async function createTrip(formData: FormData) {
       end_date,
       owner_id: user.id,
       destinations,
+      countries,
+      cities,
       template_key: template.key,
     })
     .select("*")
     .single();
+
+  if (fullInsert.error) {
+    // Fallback if cities/countries columns not migrated yet
+    const legacy = await supabase
+      .from("trips")
+      .insert({
+        title,
+        start_date,
+        end_date,
+        owner_id: user.id,
+        destinations,
+        template_key: template.key,
+      })
+      .select("*")
+      .single();
+    trip = legacy.data;
+    error = legacy.error;
+  } else {
+    trip = fullInsert.data;
+  }
+
   if (error || !trip) throw new Error(error?.message || "Failed to create trip");
 
   await supabase.from("trip_members").insert({
@@ -98,6 +163,59 @@ export async function createTrip(formData: FormData) {
 
   revalidatePath("/dashboard");
   redirect(`/trips/${trip.id}`);
+}
+
+export async function updateTripLocations(tripId: string, formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: member } = await supabase
+    .from("trip_members")
+    .select("role")
+    .eq("trip_id", tripId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!member || !["owner", "editor"].includes(member.role)) {
+    throw new Error("Only editors can update locations");
+  }
+
+  const countries = String(formData.get("countries") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const cities = String(formData.get("cities") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const destinations = [...cities, ...countries];
+
+  const { error } = await supabase
+    .from("trips")
+    .update({
+      countries,
+      cities,
+      destinations,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", tripId);
+
+  if (error) {
+    // Legacy fallback: only destinations column
+    await supabase
+      .from("trips")
+      .update({
+        destinations,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", tripId);
+  }
+
+  revalidatePath(`/trips/${tripId}`);
+  revalidatePath(`/trips/${tripId}/more`);
+  revalidatePath("/dashboard");
 }
 
 export async function joinTripByToken(token: string, role: string) {
@@ -140,15 +258,8 @@ export async function updateProfile(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const frequentFlyersRaw = String(formData.get("frequent_flyers") || "");
-  const frequentFlyers = frequentFlyersRaw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [airline, number] = line.split(":").map((s) => s.trim());
-      return { airline: airline || "Airline", number: number || "" };
-    });
+  const { accounts, frequentFlyers } = parseLinkedAccountsFromForm(formData);
+  const prefsFromAccounts = accountsToBookingPrefs(accounts);
 
   await supabase
     .from("profiles")
@@ -156,16 +267,10 @@ export async function updateProfile(formData: FormData) {
       display_name: String(formData.get("display_name") || ""),
       home_timezone: String(formData.get("home_timezone") || "UTC"),
       memberships: {
-        agoda: String(formData.get("agoda") || ""),
-        booking: String(formData.get("booking") || ""),
-        skyscanner: String(formData.get("skyscanner") || ""),
+        accounts,
         frequentFlyers,
       },
-      booking_prefs: {
-        skyscanner: formData.get("pref_skyscanner") === "on",
-        booking: formData.get("pref_booking") === "on",
-        agoda: formData.get("pref_agoda") === "on",
-      },
+      booking_prefs: prefsFromAccounts,
       updated_at: new Date().toISOString(),
     })
     .eq("id", user.id);
@@ -180,33 +285,59 @@ export async function addPassport(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const file = formData.get("file") as File | null;
-  let storage_path: string | null = null;
-  if (file && file.size > 0) {
-    const path = `${user.id}/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage
-      .from("passports")
-      .upload(path, file);
-    if (!error) storage_path = path;
+  const issuing_country = String(formData.get("issuing_country") || "").trim();
+  const passport_number =
+    String(formData.get("passport_number") || "").trim() || null;
+  const expiry_date = toIsoDate(formData.get("expiry_date"));
+  if (!issuing_country || !expiry_date) {
+    redirect("/settings?passportError=missing");
   }
 
-  await supabase.from("passports").insert({
+  const file = formData.get("file") as File | null;
+  let storage_path: string | null = null;
+  let uploadFailed = false;
+  if (file && file.size > 0) {
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_").slice(0, 80);
+    const path = `${user.id}/${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage
+      .from("passports")
+      .upload(path, file, { contentType: file.type || undefined, upsert: false });
+    if (error) {
+      uploadFailed = true;
+    } else {
+      storage_path = path;
+    }
+  }
+
+  const { error } = await supabase.from("passports").insert({
     user_id: user.id,
-    issuing_country: String(formData.get("issuing_country") || ""),
-    passport_number: String(formData.get("passport_number") || "") || null,
-    expiry_date: String(formData.get("expiry_date") || ""),
+    issuing_country,
+    passport_number,
+    expiry_date,
     storage_path,
   });
 
+  if (error) {
+    redirect(
+      `/settings?passportError=${encodeURIComponent(error.message.slice(0, 120))}`,
+    );
+  }
+
   revalidatePath("/settings");
+  if (uploadFailed) {
+    redirect("/settings?passport=saved&photo=failed");
+  }
+  redirect("/settings?passport=added");
 }
 
-export async function deletePassport(id: string) {
+export async function deletePassport(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return;
+  const id = String(formData.get("id") || "");
+  if (!id) return;
   const { data } = await supabase
     .from("passports")
     .select("storage_path")
@@ -218,6 +349,7 @@ export async function deletePassport(id: string) {
   }
   await supabase.from("passports").delete().eq("id", id).eq("user_id", user.id);
   revalidatePath("/settings");
+  redirect("/settings");
 }
 
 export async function addSegment(tripId: string, formData: FormData) {
@@ -243,6 +375,47 @@ export async function addDeadline(tripId: string, formData: FormData) {
     due_date: String(formData.get("due_date") || ""),
   });
   revalidatePath(`/trips/${tripId}/calendar`);
+}
+
+export async function addBookedStay(tripId: string, formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const siteId = String(formData.get("site_id") || "").trim();
+  const customSite = String(formData.get("custom_site") || "").trim();
+  const bookingId = String(formData.get("booking_id") || "").trim();
+  if (!siteId || !bookingId) return;
+
+  const hotelSites = sitesForFeature("hotels");
+  const known = hotelSites.find((s) => s.id === siteId);
+  const siteLabel =
+    siteId === "other"
+      ? customSite || "Other"
+      : known?.label || siteId;
+
+  await supabase.from("booked_stays").insert({
+    trip_id: tripId,
+    created_by: user.id,
+    site_id: siteId === "other" ? "other" : siteId,
+    site_label: siteLabel,
+    booking_id: bookingId,
+    property_name: String(formData.get("property_name") || "").trim() || null,
+    city: String(formData.get("city") || "").trim() || null,
+    check_in: toIsoDate(formData.get("check_in")) || null,
+    check_out: toIsoDate(formData.get("check_out")) || null,
+    notes: String(formData.get("notes") || "").trim() || null,
+  });
+
+  revalidatePath(`/trips/${tripId}/stay`);
+}
+
+export async function deleteBookedStay(tripId: string, id: string) {
+  const supabase = await createClient();
+  await supabase.from("booked_stays").delete().eq("id", id).eq("trip_id", tripId);
+  revalidatePath(`/trips/${tripId}/stay`);
 }
 
 export async function toggleDeadline(tripId: string, id: string, done: boolean) {

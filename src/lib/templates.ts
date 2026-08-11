@@ -16,7 +16,8 @@ export const TRAVEL_MODE_META: Record<
 export type TripTemplate = {
   key: string;
   title: string;
-  destinations: string[];
+  countries: string[];
+  cities: string[];
   checklist: string[];
   itineraryHints: string[];
 };
@@ -25,7 +26,8 @@ export const TRIP_TEMPLATES: TripTemplate[] = [
   {
     key: "japan-2w",
     title: "Japan 2 weeks",
-    destinations: ["Tokyo", "Kyoto", "Osaka"],
+    countries: ["Japan"],
+    cities: ["Tokyo", "Kyoto", "Osaka"],
     checklist: [
       "Check visa / waiver eligibility",
       "Book flights",
@@ -40,7 +42,8 @@ export const TRIP_TEMPLATES: TripTemplate[] = [
   {
     key: "europe-rail",
     title: "Europe rail",
-    destinations: ["Paris", "Brussels", "Amsterdam"],
+    countries: ["France", "Belgium", "Netherlands"],
+    cities: ["Paris", "Brussels", "Amsterdam"],
     checklist: [
       "Book Eurostar / high-speed legs",
       "City center hotels near stations",
@@ -53,7 +56,8 @@ export const TRIP_TEMPLATES: TripTemplate[] = [
   {
     key: "blank",
     title: "Blank trip",
-    destinations: [],
+    countries: [],
+    cities: [],
     checklist: [
       "Agree dates with the group",
       "Set a rough budget",

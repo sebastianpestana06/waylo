@@ -41,6 +41,77 @@ body {
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
+/* Trip pages inherit seasonal palette from data-season on .season-shell */
+.season-shell {
+  min-height: 100%;
+  color: var(--ink);
+  background:
+    radial-gradient(1100px 520px at 8% -8%, var(--season-glow-a) 0%, transparent 55%),
+    radial-gradient(900px 480px at 100% 0%, var(--season-glow-b) 0%, transparent 50%),
+    var(--sand);
+  transition: background 0.4s ease, color 0.3s ease;
+}
+
+.season-shell[data-season="summer"] {
+  --sand: #f7f1e3;
+  --sand-deep: #ead9b8;
+  --ink: #1f3a2e;
+  --ink-soft: #4a6356;
+  --sea: #1f8a7a;
+  --sea-deep: #15695c;
+  --coral: #e07a2f;
+  --leaf: #3f8f4a;
+  --card: #fffaf0;
+  --line: #dcc9a4;
+  --season-glow-a: #ffe08a;
+  --season-glow-b: #9fe7d2;
+}
+
+.season-shell[data-season="winter"] {
+  --sand: #e8eef5;
+  --sand-deep: #d2dce8;
+  --ink: #1a2740;
+  --ink-soft: #4a5c78;
+  --sea: #3a6ea5;
+  --sea-deep: #2b5380;
+  --coral: #6b7c93;
+  --leaf: #4f7a8c;
+  --card: #f7faff;
+  --line: #c5d0de;
+  --season-glow-a: #cfe0f5;
+  --season-glow-b: #e8f1ff;
+}
+
+.season-shell[data-season="spring"] {
+  --sand: #f4f6ec;
+  --sand-deep: #e0e8d2;
+  --ink: #2a3b2e;
+  --ink-soft: #556855;
+  --sea: #5a8f6d;
+  --sea-deep: #447556;
+  --coral: #d48aa8;
+  --leaf: #6aa86a;
+  --card: #fcfff7;
+  --line: #c9d6b8;
+  --season-glow-a: #f7c6d8;
+  --season-glow-b: #d4efc2;
+}
+
+.season-shell[data-season="autumn"] {
+  --sand: #f3ebe2;
+  --sand-deep: #e4d0b8;
+  --ink: #3a2418;
+  --ink-soft: #6b4e3a;
+  --sea: #a65b2e;
+  --sea-deep: #84461f;
+  --coral: #c45c26;
+  --leaf: #7a8f3d;
+  --card: #fff8f1;
+  --line: #d4b898;
+  --season-glow-a: #f0c27a;
+  --season-glow-b: #e8a070;
+}
+
 h1,
 h2,
 h3,

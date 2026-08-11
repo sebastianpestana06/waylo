@@ -5,9 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   BookingDeadline,
   BookingPrefs,
+  LinkedAccount,
+  Memberships,
   TravelSegment,
   Trip,
 } from "@/lib/types";
+import { normalizeLinkedAccounts } from "@/lib/linked-accounts";
 
 export default async function CalendarPage({
   params,
@@ -34,7 +37,11 @@ export default async function CalendarPage({
         .select("*")
         .eq("trip_id", tripId)
         .order("due_date"),
-      supabase.from("profiles").select("booking_prefs").eq("id", user.id).single(),
+      supabase
+        .from("profiles")
+        .select("booking_prefs, memberships")
+        .eq("id", user.id)
+        .single(),
       supabase
         .from("trip_members")
         .select("role")
@@ -45,6 +52,9 @@ export default async function CalendarPage({
 
   if (!trip) notFound();
   const canEdit = member?.role === "owner" || member?.role === "editor";
+  const linkedAccounts = normalizeLinkedAccounts(
+    (profile?.memberships || {}) as Memberships,
+  );
 
   return (
     <div className="space-y-6">
@@ -53,6 +63,7 @@ export default async function CalendarPage({
         segments={(segments || []) as TravelSegment[]}
         deadlines={(deadlines || []) as BookingDeadline[]}
         prefs={(profile?.booking_prefs || {}) as BookingPrefs}
+        linkedAccounts={linkedAccounts as LinkedAccount[]}
       />
 
       <section className="panel space-y-2">

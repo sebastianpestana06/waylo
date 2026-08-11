@@ -3,6 +3,7 @@ import { bookingDeepLinks } from "@/lib/booking-links";
 import type {
   BookingDeadline,
   BookingPrefs,
+  LinkedAccount,
   TravelSegment,
   Trip,
 } from "@/lib/types";
@@ -18,11 +19,13 @@ export function TripCalendar({
   segments,
   deadlines,
   prefs,
+  linkedAccounts = [],
 }: {
   trip: Trip;
   segments: TravelSegment[];
   deadlines: BookingDeadline[];
   prefs?: BookingPrefs;
+  linkedAccounts?: LinkedAccount[];
 }) {
   const start = trip.start_date ? parseISO(trip.start_date) : null;
   const end = trip.end_date ? parseISO(trip.end_date) : null;
@@ -100,7 +103,7 @@ export function TripCalendar({
         )}
         {segments.map((s) => {
           const meta = TRAVEL_MODE_META[s.mode];
-          const links = bookingDeepLinks(s, prefs);
+          const links = bookingDeepLinks(s, prefs, linkedAccounts);
           return (
             <div key={s.id} className="panel">
               <div className="flex items-start justify-between gap-3">

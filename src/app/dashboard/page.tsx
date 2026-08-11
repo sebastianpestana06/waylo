@@ -4,6 +4,7 @@ import { ReminderBanner } from "@/components/ReminderBanner";
 import { buildReminders } from "@/lib/alerts";
 import { createTrip, signOut } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
+import { formatTripLocations } from "@/lib/locations";
 import { TRIP_TEMPLATES } from "@/lib/templates";
 import type {
   BookingDeadline,
@@ -116,7 +117,7 @@ export default async function DashboardPage() {
               </p>
               <h2 className="font-display mt-1 text-2xl">{trip.title}</h2>
               <p className="mt-2 text-sm text-ink-soft">
-                {(trip.destinations || []).join(" · ") || "Destinations TBD"}
+                {formatTripLocations(trip) || "Countries & cities TBD"}
               </p>
               <p className="mt-1 text-sm text-ink-soft">
                 {trip.start_date || "?"} → {trip.end_date || "?"}
@@ -144,11 +145,32 @@ export default async function DashboardPage() {
               <input name="start_date" type="date" className="field" />
               <input name="end_date" type="date" className="field" />
             </div>
-            <input
-              name="destinations"
-              className="field"
-              placeholder="Destinations (comma-separated)"
-            />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-soft">
+                  Countries
+                </label>
+                <input
+                  name="countries"
+                  className="field"
+                  placeholder="e.g. Japan, South Korea"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-soft">
+                  Cities <span className="font-normal">(optional)</span>
+                </label>
+                <input
+                  name="cities"
+                  className="field"
+                  placeholder="e.g. Tokyo, Seoul — optional"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-ink-soft">
+              Comma-separated lists. Cities can be added or edited later on the
+              trip’s More page.
+            </p>
             <select name="template_key" className="field" defaultValue="blank">
               {TRIP_TEMPLATES.map((t) => (
                 <option key={t.key} value={t.key}>
